@@ -54,7 +54,7 @@ jobs:
 
     strategy:
       matrix:
-        domain: ${{ fromJson('''${{ steps.set_matrix.outputs.domains_json }}''') }}
+        domain: ${{ fromJson(needs.prepare_matrix.outputs.domains_json) }}
 
     steps:
       - name: Checkout private store-recon (other account)

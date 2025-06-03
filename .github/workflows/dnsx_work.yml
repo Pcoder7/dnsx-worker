@@ -42,7 +42,10 @@ jobs:
           fi
 
           echo "DEBUG: domains_json is: $domains_json"
-          echo "domains_json=$domains_json" >> $GITHUB_OUTPUT            
+          echo "domains_json=$domains_json" >> $GITHUB_OUTPUT     
+
+      - name: Debug raw JSON
+        run: echo "-> RAW domains_json ${{ steps.set_matrix.outputs.domains_json }}"        
 
   dnsx_recon:
     needs: prepare_matrix

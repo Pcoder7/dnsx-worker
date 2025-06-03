@@ -47,11 +47,11 @@ jobs:
   dnsx_recon:
     needs: prepare_matrix
     runs-on: ubuntu-latest
-    if: ${{ needs.prepare_matrix.outputs.domains != '' }}
+    if: ${{ needs.prepare_matrix.outputs.domains != '[]' }}
 
     strategy:
       matrix:
-        domain: ${{ fromJson(needs.prepare_matrix.outputs.domains != '' && needs.prepare_matrix.outputs.domains || '[]') }}
+        domain: ${{ fromJson(needs.prepare_matrix.outputs.domains) }}
 
     steps:
       - name: Checkout private store-recon (other account)

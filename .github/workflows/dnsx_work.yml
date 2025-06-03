@@ -25,7 +25,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        domain: ${{ fromJson(needs.prepare_matrix.outputs.domains) }}
+        domain: if: ${{ needs.prepare_matrix.outputs.domains != '[]' }}
     steps:
       - name: Checkout private store-recon (other account)
         uses: actions/checkout@v3

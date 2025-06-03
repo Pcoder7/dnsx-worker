@@ -15,7 +15,7 @@ jobs:
      - name: Checkout private store-recon (other account)
        uses: actions/checkout@v3
        with:
-         repository: other-account/store-recon
+         repository: pushrockzz/store-recon
          token: ${{ secrets.STORE_RECON_PAT }}
          path: store-recon
          fetch-depth: 0

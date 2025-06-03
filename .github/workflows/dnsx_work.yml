@@ -109,7 +109,7 @@ jobs:
         with:
           name: dnsx_${{ matrix.domain }}
           path: results/${{ matrix.domain }}/dnsx.json
-          retention-days: 7
+          retention-days: 1
 
       - name: Commit and push dnsx.json back to store-recon
         run: |

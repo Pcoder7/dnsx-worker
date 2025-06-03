@@ -10,6 +10,10 @@ permissions:
 jobs:
   prepare_matrix:
     runs-on: ubuntu-latest
+    
+    outputs:
+      domains_json: ${{ steps.set_matrix.outputs.domains_json }}   
+      
     steps:
       - name: Checkout private store-recon (other account)
         uses: actions/checkout@v3

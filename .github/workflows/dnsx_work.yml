@@ -1,3 +1,12 @@
+name: Parallel DNSX Recon
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+
 jobs:
   prepare_matrix:
     runs-on: ubuntu-latest
@@ -28,25 +37,23 @@ jobs:
 
       - name:  Install dnsx tool
         run: |
-        
           go install github.com/projectdiscovery/dnsx/cmd/dnsx@latest
           echo "$HOME/go/bin" >> $GITHUB_PATH
 
       - name: Prepare working directories for ${{ matrix.domain }}
         run: |
-
-         cd store-recon
-         DOMAIN="${{ matrix.domain }}"
-         echo "Running DNSX recon for domain: $DOMAIN"
-         mkdir -p work/${DOMAIN}
-         mkdir -p results/${DOMAIN}
-         cd ..
+          cd store-recon
+          DOMAIN="${{ matrix.domain }}"
+          echo "Running DNSX recon for domain: $DOMAIN"
+          mkdir -p work/${DOMAIN}
+          mkdir -p results/${DOMAIN}
+          cd ..
 
       - name: Copy all_resolved.txt for ${{ matrix.domain }}
         run: |
 
-         DOMAIN="${{ matrix.domain }}"
-         cp "store-recon/results/${DOMAIN}/all_resolved.txt" "work/${DOMAIN}/all_resolved.txt"
+          DOMAIN="${{ matrix.domain }}"
+          cp "store-recon/results/${DOMAIN}/all_resolved.txt" "work/${DOMAIN}/all_resolved.txt"
 
       - name: Split all_resolved.txt into chunks
         run: |
@@ -88,8 +95,7 @@ jobs:
         run: |
           DOMAIN="${{ matrix.domain }}"
           OUT_DIR="work/${DOMAIN}/dnsx_out"
-         COMBINED="results/${DOMAIN}/dnsx.json"
-
+          COMBINED="results/${DOMAIN}/dnsx.json"
           echo "Combining JSON files for $DOMAIN..."
           if ls "${OUT_DIR}"/dnsx_*.json 1> /dev/null 2>&1; then
             jq -s 'add' "${OUT_DIR}"/dnsx_*.json > "${COMBINED}"
@@ -108,33 +114,33 @@ jobs:
       - name: Commit and push dnsx.json back to store-recon
         run: |
 
-         DOMAIN="${{ matrix.domain }}"
-         SAFE_DOMAIN=$(echo "$DOMAIN" | tr '.' '_')
-         TARGET_PATH="results/${DOMAIN}/dnsx.json"
+          DOMAIN="${{ matrix.domain }}"
+          SAFE_DOMAIN=$(echo "$DOMAIN" | tr '.' '_')
+          TARGET_PATH="results/${DOMAIN}/dnsx.json"
 
-         # Configure Git inside the checked‐out store-recon folder
-         cd store-recon
-         git config user.name "github-actions[bot]"
-         git config user.email "github-actions[bot]@users.noreply.github.com"
+          # Configure Git inside the checked‐out store-recon folder
+          cd store-recon
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
 
-         # Make sure we are on main and up-to-date
-         git fetch origin main
-         git checkout main
-         git reset --hard origin/main
+          # Make sure we are on main and up-to-date
+          git fetch origin main
+          git checkout main
+          git reset --hard origin/main
 
-         # Copy the newly combined JSON from the workspace into store-recon's results/<domain>/
-         mkdir -p "results/${DOMAIN}"
-         cp "../results/${DOMAIN}/dnsx.json" "${TARGET_PATH}"
+          # Copy the newly combined JSON from the workspace into store-recon's results/<domain>/
+          mkdir -p "results/${DOMAIN}"
+          cp "../results/${DOMAIN}/dnsx.json" "${TARGET_PATH}"
 
-         git add "${TARGET_PATH}"
-         if git diff --cached --quiet; then
-           echo "No changes to dnsx.json for ${DOMAIN}; skipping commit."
-           exit 0
-         fi
+          git add "${TARGET_PATH}"
+          if git diff --cached --quiet; then
+            echo "No changes to dnsx.json for ${DOMAIN}; skipping commit."
+            exit 0
+          fi
 
-         git commit -m "Add/update dnsx.json for ${DOMAIN}"
+          git commit -m "Add/update dnsx.json for ${DOMAIN}"
 
-         # Push back using the PAT via HTTPS
-         git remote set-url origin \
-           https://x-access-token:${{ secrets.STORE_RECON_PAT }}@github.com/other-account/store-recon.git
-         git push origin HEAD:main
+          # Push back using the PAT via HTTPS
+          git remote set-url origin \
+            https://x-access-token:${{ secrets.STORE_RECON_PAT }}@github.com/other-account/store-recon.git
+          git push origin HEAD:main

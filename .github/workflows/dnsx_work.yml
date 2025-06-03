@@ -18,14 +18,13 @@ jobs:
       matrix:
         domain: ${{ fromJson(needs.prepare_matrix.outputs.domains) }}
     steps:
-
-     - name: Checkout private store-recon (other account)
-       uses: actions/checkout@v3
-       with:
-         repository: other-account/store-recon
-         token: ${{ secrets.STORE_RECON_PAT }}
-         path: store-recon
-         fetch-depth: 0
+      - name: Checkout private store-recon (other account)
+        uses: actions/checkout@v3
+        with:
+          repository: other-account/store-recon
+          token: ${{ secrets.STORE_RECON_PAT }}
+          path: store-recon
+          fetch-depth: 0
 
       - name:  Install dnsx tool
         run: |

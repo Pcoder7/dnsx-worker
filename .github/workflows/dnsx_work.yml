@@ -28,17 +28,25 @@ jobs:
         id: set_matrix
         shell: bash
         run: |
+          shopt -s nullglob
+          domain_dirs_temp=()
           # For each store-recon/results/<domain>/all_resolved.txt that exists and is non-empty,
           # collect the "<domain>" folder name.
-          mapfile -t domain_dirs < <(
-            for f in $(find store-recon/results -maxdepth 2 -type f -name 'all_resolved.txt'); do
-              # -s returns true if file size > 0
-              if [ -s "$f" ]; then
-                dirname=$(echo "$f" | awk -F/ '{print $3}')
-                echo "$dirname"
+          for f in $(find store-recon/results -mindepth 2 -maxdepth 2 -type f -name 'all_resolved.txt'); do
+            if [ -s "$f" ]; then
+              # Robustly get the parent directory name of all_resolved.txt
+              # e.g., if f = store-recon/results/example.com/all_resolved.txt
+              # dirname "$f" -> store-recon/results/example.com
+              # basename "..." -> example.com
+              domain_folder_name=$(basename "$(dirname "$f")")
+              if [ -n "$domain_folder_name" ]; then # Ensure it's not empty
+                domain_dirs_temp+=("$domain_folder_name")
               fi
-            done | sort -u
-          )
+            fi
+          done
+          
+          # To get unique values, sort and uniq, then mapfile
+          mapfile -t domain_dirs < <(printf "%s\n" "${domain_dirs_temp[@]}" | sort -u)
 
           if [ "${#domain_dirs[@]}" -eq 0 ]; then
             domains_json="[]"
@@ -96,75 +104,102 @@ jobs:
       - name: Split all_resolved.txt into chunks
         shell: bash
         run: |
-          # (Other variable assignments)
+          
+         
+          DOMAIN="${{ matrix.domain }}"
+          INPUT_FILE="work/${DOMAIN}/all_resolved.txt"
+          CHUNKS_DIR="work/${DOMAIN}/chunks"
 
-          # ... (after CHUNKS_DIR and mkdir)
-          mkdir -p "${CHUNKS_DIR}"
+
+          # Initial debug checks (these were good to have)
+          echo "DEBUG: Received matrix.domain = '${{ matrix.domain }}'"
+          if [ -z "${{ matrix.domain }}" ]; then
+            echo "ERROR: matrix.domain is empty! This should not happen if prepare_matrix is working correctly."
+            exit 1
+          fi
           
-          # --- BEGIN ADDED/MODIFIED SECTION ---
-          echo "DEBUG: DOMAIN is '${DOMAIN}'"
-          echo "DEBUG: INPUT_FILE is '${INPUT_FILE}'"
+          echo "DEBUG: DOMAIN variable is set to '${DOMAIN}'" # Verifies DOMAIN from matrix.domain
+          echo "DEBUG: INPUT_FILE is being set to '${INPUT_FILE}'"
+          echo "DEBUG: CHUNKS_DIR is being set to '${CHUNKS_DIR}'"
+
+          if [ -z "${CHUNKS_DIR}" ] && [ -n "${DOMAIN}" ]; then
+            echo "ERROR: CHUNKS_DIR is empty even though DOMAIN ('${DOMAIN}') is not. This is unexpected."
+            exit 1
+          elif [ -z "${CHUNKS_DIR}" ] && [ -z "${DOMAIN}" ]; then
+            echo "ERROR: CHUNKS_DIR is empty because DOMAIN is empty (problem from matrix.domain)."
+            exit 1
+          fi
+          # --- End initial debug checks ---
+
+          # Now that CHUNKS_DIR is defined, this mkdir can work
+          mkdir -p "${CHUNKS_DIR}" 
           
+          # Your existing file existence and emptiness checks (these are good)
           if [ ! -f "${INPUT_FILE}" ]; then
             echo "Error: Input file '${INPUT_FILE}' does not exist or is not a regular file."
             echo "This file was expected to be created by the 'Copy all_resolved.txt' step."
-            ls -ld "$(dirname "${INPUT_FILE}")" # List the parent directory
-            ls -l "work/${DOMAIN}/" # List content of work/${DOMAIN}
+            # It's useful to see what's in the expected parent directory
+            if [ -d "$(dirname "${INPUT_FILE}")" ]; then
+              echo "Contents of $(dirname "${INPUT_FILE}"):"
+              ls -l "$(dirname "${INPUT_FILE}")"
+            else
+              echo "Parent directory $(dirname "${INPUT_FILE}") does not exist."
+            fi
+            # Also useful to see if the 'work' directory for the domain was created at all
+            if [ -d "work/${DOMAIN}" ]; then
+                echo "Contents of work/${DOMAIN}/:"
+                ls -l "work/${DOMAIN}/"
+            else
+                echo "Directory work/${DOMAIN}/ does not exist."
+            fi
             exit 1
           fi
           if [ ! -s "${INPUT_FILE}" ]; then
             echo "Warning: Input file '${INPUT_FILE}' is empty."
-            # Decide how to handle: either exit, or proceed to create an empty chunk.
-            # For now, let's allow proceeding, wc -l will return 0.
+            # If the input file is empty, wc -l will output 0.
+            # The logic below will then copy the empty file to chunk_01.txt, which is reasonable.
           fi             
+          
           total_lines=$(wc -l < "${INPUT_FILE}")
           
-          # Use the environment variable LINES_PER_CHUNK, provide a default if it's not set
-          # The :-1000 means if LINES_PER_CHUNK is unset or null, use 1000.
-          # If it's set but empty, this might still be an issue for arithmetic,
-          # but the job-level 'env' should prevent it from being empty.
-          CURRENT_CHUNK_SIZE=${LINES_PER_CHUNK:-1000} 
+          # Use the environment variable LINES_PER_CHUNK
+          # The job-level 'env' block should ensure LINES_PER_CHUNK is set.
+          # Using it directly assumes it's always set and numeric.
+          # For safety, you can still use a default, but the env block is the primary source.
+          CURRENT_CHUNK_SIZE=${LINES_PER_CHUNK:-1000} # Fallback if LINES_PER_CHUNK is somehow unset/empty
           
           echo "DEBUG: Total lines in ${INPUT_FILE}: $total_lines"
-          echo "DEBUG: LINES_PER_CHUNK from env: '${LINES_PER_CHUNK}'" # See what the env var actually is
+          echo "DEBUG: LINES_PER_CHUNK from env: '${LINES_PER_CHUNK}'" 
           echo "DEBUG: Using CHUNK_SIZE: $CURRENT_CHUNK_SIZE"
           
-          # Ensure total_lines is just the number, not leading spaces or filename
-          # wc -l < file  should already give just the number.
-          # But to be safe, especially if total_lines could have whitespace:
           total_lines_numeric=$(echo "$total_lines" | awk '{print $1}')
           
-          if [ -z "$total_lines_numeric" ]; then
-              echo "Error: Could not determine total lines from ${INPUT_FILE}."
-              # Handle case where file is empty or wc -l failed
-              # For an empty file, total_lines_numeric would be 0.
-              # Let's assume if it's truly empty string, it's an error.
-              # If file is empty, wc -l gives "0", so total_lines_numeric would be 0.
-              # This check is more for if wc -l somehow failed and produced no output.
-              # If the file doesn't exist, wc -l would print an error to stderr and 0 to stdout
-              # The script should probably check if INPUT_FILE exists and is readable first.
-              if [ ! -f "${INPUT_FILE}" ] || [ ! -r "${INPUT_FILE}" ]; then
-                echo "Error: Input file ${INPUT_FILE} does not exist or is not readable."
+          # This comprehensive check for total_lines_numeric was good.
+          if [ -z "$total_lines_numeric" ] && [ "$total_lines_numeric" != "0" ]; then # Check if empty string AND not "0"
+              echo "Error: Could not determine total lines from ${INPUT_FILE}, or it's not a numeric value."
+              if [ ! -f "${INPUT_FILE}" ] || [ ! -r "${INPUT_FILE}" ]; then # This check is somewhat redundant due to earlier one
+                echo "Error: Input file ${INPUT_FILE} does not exist or is not readable (secondary check)."
                 exit 1
-              elif [ ! -s "${INPUT_FILE}" ]; then # If file is empty
-                echo "Input file ${INPUT_FILE} is empty. Creating one empty chunk."
-                touch "${CHUNKS_DIR}/chunk_01.txt" # Create an empty chunk
-                total_lines_numeric=0 # Set to 0 explicitly for logic below
+              # If INPUT_FILE exists but wc -l failed to produce a number (highly unlikely for existing files)
               else
-                echo "Error: 'total_lines_numeric' is empty after processing wc -l output. This is unexpected."
+                echo "Error: 'total_lines_numeric' is empty or non-numeric after processing wc -l output. wc -l output was: '$total_lines'. This is unexpected."
                 exit 1
               fi
           fi
+          # Ensure CURRENT_CHUNK_SIZE is a positive integer
+          if ! [[ "$CURRENT_CHUNK_SIZE" =~ ^[1-9][0-9]*$ ]]; then
+            echo "Error: LINES_PER_CHUNK ('$CURRENT_CHUNK_SIZE') is not a positive integer. Defaulting to 1000."
+            CURRENT_CHUNK_SIZE=1000
+          fi
           
           if [ "$total_lines_numeric" -le "$CURRENT_CHUNK_SIZE" ]; then
-            # If total_lines is 0 (empty file) and CURRENT_CHUNK_SIZE is > 0, this condition is true.
-            # So it will copy the (potentially empty) input file.
             cp "${INPUT_FILE}" "${CHUNKS_DIR}/chunk_01.txt"
           else
             split -l "$CURRENT_CHUNK_SIZE" -d --additional-suffix=".txt" \
               "${INPUT_FILE}" "${CHUNKS_DIR}/chunk_"
           fi
-
+          echo "Chunks created for $DOMAIN:"
+          ls -1 "${CHUNKS_DIR}"                  
       - name: Run dnsx on each chunk (3 parallel jobs)
         run: |
           DOMAIN="${{ matrix.domain }}"

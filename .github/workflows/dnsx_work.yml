@@ -76,12 +76,12 @@ jobs:
 
       - name: Prepare working directories for ${{ matrix.domain }}
         run: |
-          cd store-recon
+          
           DOMAIN="${{ matrix.domain }}"
           echo "Running DNSX recon for domain: $DOMAIN"
           mkdir -p work/${DOMAIN}
           mkdir -p results/${DOMAIN}
-          cd ..
+          
 
       - name: Copy all_resolved.txt for ${{ matrix.domain }}
         run: |

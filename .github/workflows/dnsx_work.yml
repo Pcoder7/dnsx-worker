@@ -269,5 +269,5 @@ jobs:
 
           # Push back using the PAT via HTTPS
           git remote set-url origin \
-            https://x-access-token:${{ secrets.STORE_RECON_PAT }}@github.com/other-account/store-recon.git
+            https://x-access-token:${{ secrets.STORE_RECON_PAT }}@github.com/pushrockzz/store-recon.git
           git push origin HEAD:main

@@ -91,21 +91,54 @@ jobs:
 
       - name: Split all_resolved.txt into chunks
         run: |
-          DOMAIN="${{ matrix.domain }}"
-          INPUT_FILE="work/${DOMAIN}/all_resolved.txt"
-          CHUNKS_DIR="work/${DOMAIN}/chunks"
-          mkdir -p "${CHUNKS_DIR}"
-
+          # (Other variable assignments)
           total_lines=$(wc -l < "${INPUT_FILE}")
-          if [ "$total_lines" -le "${LINES_PER_CHUNK}" ]; then
+          
+          # Use the environment variable LINES_PER_CHUNK, provide a default if it's not set
+          # The :-1000 means if LINES_PER_CHUNK is unset or null, use 1000.
+          # If it's set but empty, this might still be an issue for arithmetic,
+          # but the job-level 'env' should prevent it from being empty.
+          CURRENT_CHUNK_SIZE=${LINES_PER_CHUNK:-1000} 
+          
+          echo "DEBUG: Total lines in ${INPUT_FILE}: $total_lines"
+          echo "DEBUG: LINES_PER_CHUNK from env: '${LINES_PER_CHUNK}'" # See what the env var actually is
+          echo "DEBUG: Using CHUNK_SIZE: $CURRENT_CHUNK_SIZE"
+          
+          # Ensure total_lines is just the number, not leading spaces or filename
+          # wc -l < file  should already give just the number.
+          # But to be safe, especially if total_lines could have whitespace:
+          total_lines_numeric=$(echo "$total_lines" | awk '{print $1}')
+          
+          if [ -z "$total_lines_numeric" ]; then
+              echo "Error: Could not determine total lines from ${INPUT_FILE}."
+              # Handle case where file is empty or wc -l failed
+              # For an empty file, total_lines_numeric would be 0.
+              # Let's assume if it's truly empty string, it's an error.
+              # If file is empty, wc -l gives "0", so total_lines_numeric would be 0.
+              # This check is more for if wc -l somehow failed and produced no output.
+              # If the file doesn't exist, wc -l would print an error to stderr and 0 to stdout
+              # The script should probably check if INPUT_FILE exists and is readable first.
+              if [ ! -f "${INPUT_FILE}" ] || [ ! -r "${INPUT_FILE}" ]; then
+                echo "Error: Input file ${INPUT_FILE} does not exist or is not readable."
+                exit 1
+              elif [ ! -s "${INPUT_FILE}" ]; then # If file is empty
+                echo "Input file ${INPUT_FILE} is empty. Creating one empty chunk."
+                touch "${CHUNKS_DIR}/chunk_01.txt" # Create an empty chunk
+                total_lines_numeric=0 # Set to 0 explicitly for logic below
+              else
+                echo "Error: 'total_lines_numeric' is empty after processing wc -l output. This is unexpected."
+                exit 1
+              fi
+          fi
+          
+          if [ "$total_lines_numeric" -le "$CURRENT_CHUNK_SIZE" ]; then
+            # If total_lines is 0 (empty file) and CURRENT_CHUNK_SIZE is > 0, this condition is true.
+            # So it will copy the (potentially empty) input file.
             cp "${INPUT_FILE}" "${CHUNKS_DIR}/chunk_01.txt"
           else
-            split -l "${LINES_PER_CHUNK}" -d --additional-suffix=".txt" \
+            split -l "$CURRENT_CHUNK_SIZE" -d --additional-suffix=".txt" \
               "${INPUT_FILE}" "${CHUNKS_DIR}/chunk_"
           fi
-
-          echo "Chunks created for $DOMAIN:"
-          ls -1 "${CHUNKS_DIR}"
 
       - name: Run dnsx on each chunk (3 parallel jobs)
         run: |

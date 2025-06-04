@@ -10,11 +10,7 @@ permissions:
 jobs:
   prepare_matrix:
     runs-on: ubuntu-latest
-    container:
-      image: ghcr.io/pcoder7/spider-puredns-actions:latest
-      credentials:
-        username: ${{ github.actor }}
-        password: ${{ secrets.GHCR_TOKEN }}    
+
     
     outputs:
       domains_json: ${{ steps.set_matrix.outputs.domains_json }}   
@@ -30,6 +26,7 @@ jobs:
       
       - name: Gather domain names with non-empty all_resolved.txt
         id: set_matrix
+        shell: bash
         run: |
           # For each store-recon/results/<domain>/all_resolved.txt that exists and is non-empty,
           # collect the "<domain>" folder name.
@@ -59,6 +56,11 @@ jobs:
   dnsx_recon:
     needs: prepare_matrix
     runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/pcoder7/spider-puredns-actions:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GHCR_TOKEN }}        
     if: ${{ needs.prepare_matrix.outputs.domains_json != '[]' }}
     env:
       LINES_PER_CHUNK: 1000 

@@ -76,11 +76,6 @@ jobs:
           path: store-recon
           fetch-depth: 0
 
-      - name:  Install dnsx tool
-        run: |
-          go install github.com/projectdiscovery/dnsx/cmd/dnsx@latest
-          echo "$HOME/go/bin" >> $GITHUB_PATH
-
       - name: Prepare working directories for ${{ matrix.domain }}
         run: |
           

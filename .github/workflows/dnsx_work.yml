@@ -94,8 +94,29 @@ jobs:
           cp "store-recon/results/${DOMAIN}/all_resolved.txt" "work/${DOMAIN}/all_resolved.txt"
 
       - name: Split all_resolved.txt into chunks
+        shell: bash
         run: |
           # (Other variable assignments)
+
+          # ... (after CHUNKS_DIR and mkdir)
+          mkdir -p "${CHUNKS_DIR}"
+          
+          # --- BEGIN ADDED/MODIFIED SECTION ---
+          echo "DEBUG: DOMAIN is '${DOMAIN}'"
+          echo "DEBUG: INPUT_FILE is '${INPUT_FILE}'"
+          
+          if [ ! -f "${INPUT_FILE}" ]; then
+            echo "Error: Input file '${INPUT_FILE}' does not exist or is not a regular file."
+            echo "This file was expected to be created by the 'Copy all_resolved.txt' step."
+            ls -ld "$(dirname "${INPUT_FILE}")" # List the parent directory
+            ls -l "work/${DOMAIN}/" # List content of work/${DOMAIN}
+            exit 1
+          fi
+          if [ ! -s "${INPUT_FILE}" ]; then
+            echo "Warning: Input file '${INPUT_FILE}' is empty."
+            # Decide how to handle: either exit, or proceed to create an empty chunk.
+            # For now, let's allow proceeding, wc -l will return 0.
+          fi             
           total_lines=$(wc -l < "${INPUT_FILE}")
           
           # Use the environment variable LINES_PER_CHUNK, provide a default if it's not set
